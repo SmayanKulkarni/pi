@@ -45,3 +45,5 @@ collect.sh
 
 # graphify output (regenerable, large)
 graphify-out/
+
+.agents/

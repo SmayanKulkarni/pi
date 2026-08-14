@@ -85,6 +85,40 @@ An observation that a File may have moved, drawn from what the agent was seen to
 is testimony, not a ruling: it may be absent, but it cannot be authoritatively wrong.
 _Avoid_: rename, move (as a recorded fact)
 
+### Relations between Decisions
+
+**Follows**:
+The relation between a Decision and the one immediately before it in the same Session,
+by generation order. Read from `decision.id`'s own ordering; never a stored row.
+_Avoid_: next, previous, precedes
+
+**Steer**:
+The raw witnessed fact that a user message arrived mid-Run — after this Run's first
+`turn_end`. Capture writes only `(session_id, ts)`; the message text itself is not
+duplicated, since the Session file already holds it.
+_Avoid_: interruption, redirect (as the stored fact — that's the derived relation below)
+
+**Redirected-by**:
+The relation holding when a Decision is the first to arrive after a Steer in its Session.
+Paired by timestamp at read time, never stored as its own row.
+_Avoid_: interrupted-by, steered-by
+
+**Caused-by-error**:
+The relation holding when a Decision's immediate predecessor (via Follows) issued a
+failed tool call, *and* the Decision is not also Redirected-by a Steer. Witnessed evidence
+(a Steer) always outranks inferred adjacency.
+_Avoid_: recovers-from, follows-error
+
+**Retry-of**:
+Caused-by-error, narrowed to a predecessor and successor that named the same tool (and
+the same File, when the tool is anchored to one).
+_Avoid_: repeats, retries (as a noun on the earlier Decision)
+
+**Resumed-from**:
+The relation holding across a Session boundary, from a resumed Session's first Decision
+back to its parent Session's last. Backed by `session.parent_session_id`; not a new fact.
+_Avoid_: continues, forked-from
+
 ### The two passes
 
 **Capture**:
