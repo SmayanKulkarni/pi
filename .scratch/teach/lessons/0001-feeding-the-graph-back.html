@@ -1,0 +1,643 @@
+<title>Feeding the Graph Back</title>
+
+<style>
+	:root {
+		--paper:      #F5F7F9;
+		--surface:    #FFFFFF;
+		--ink:        #17202B;
+		--muted:      #5C6A79;
+		--faint:      #8695A4;
+		--rule:       #D2D9E1;
+		--rule-soft:  #E5EAEF;
+		--accent:     #1F5C8B;
+		--accent-dim: #E4EDF4;
+		--open:       #9C5416;
+		--open-dim:   #F4E9DD;
+		--shadow:     0 1px 2px rgba(23, 32, 43, .06);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme="light"]) {
+			--paper:      #0E141C;
+			--surface:    #151E29;
+			--ink:        #DFE6ED;
+			--muted:      #94A3B3;
+			--faint:      #6D7E90;
+			--rule:       #2A3746;
+			--rule-soft:  #1E2937;
+			--accent:     #74B4E1;
+			--accent-dim: #17303F;
+			--open:       #D9954A;
+			--open-dim:   #33271A;
+			--shadow:     0 1px 2px rgba(0, 0, 0, .35);
+		}
+	}
+
+	:root[data-theme="dark"] {
+		--paper:      #0E141C;
+		--surface:    #151E29;
+		--ink:        #DFE6ED;
+		--muted:      #94A3B3;
+		--faint:      #6D7E90;
+		--rule:       #2A3746;
+		--rule-soft:  #1E2937;
+		--accent:     #74B4E1;
+		--accent-dim: #17303F;
+		--open:       #D9954A;
+		--open-dim:   #33271A;
+		--shadow:     0 1px 2px rgba(0, 0, 0, .35);
+	}
+
+	body {
+		background: var(--paper);
+		color: var(--ink);
+		font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+		font-size: 17px;
+		line-height: 1.62;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	.sheet {
+		max-width: 1080px;
+		margin: 0 auto;
+		padding: 4rem 1.75rem 6rem;
+		display: grid;
+		grid-template-columns: minmax(0, 66ch) minmax(0, 15rem);
+		gap: 0 3rem;
+		align-items: start;
+	}
+
+	.sheet > * { grid-column: 1; }
+
+	.mono {
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+	}
+
+	/* ---- masthead ---- */
+
+	.masthead { display: flex; flex-direction: column; gap: .9rem; margin-bottom: 3.25rem; }
+
+	.eyebrow {
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .7rem;
+		letter-spacing: .16em;
+		text-transform: uppercase;
+		color: var(--faint);
+		display: flex;
+		flex-wrap: wrap;
+		gap: .5rem 1.1rem;
+		align-items: center;
+	}
+
+	h1 {
+		font-size: clamp(2.1rem, 5vw, 2.9rem);
+		line-height: 1.1;
+		font-weight: 600;
+		letter-spacing: -.015em;
+		text-wrap: balance;
+		margin: 0;
+	}
+
+	.standfirst {
+		font-size: 1.2rem;
+		line-height: 1.5;
+		color: var(--muted);
+		max-width: 54ch;
+		margin: 0;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: .4rem;
+		padding: .18rem .55rem;
+		border: 1px solid var(--open);
+		color: var(--open);
+		background: var(--open-dim);
+		border-radius: 2px;
+		letter-spacing: .1em;
+	}
+
+	.chip.settled { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+	/* ---- structure ---- */
+
+	section { margin-bottom: 3rem; }
+
+	h2 {
+		font-size: 1.6rem;
+		font-weight: 600;
+		line-height: 1.25;
+		letter-spacing: -.01em;
+		text-wrap: balance;
+		margin: 0 0 1rem;
+		padding-top: 1.4rem;
+		border-top: 1px solid var(--rule);
+	}
+
+	h2 .num {
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .78rem;
+		color: var(--faint);
+		letter-spacing: .1em;
+		display: block;
+		margin-bottom: .45rem;
+		font-weight: 400;
+	}
+
+	h3 {
+		font-size: 1.16rem;
+		font-weight: 600;
+		margin: 2rem 0 .6rem;
+		letter-spacing: -.005em;
+	}
+
+	p { margin: 0 0 1.05rem; }
+	p:last-child { margin-bottom: 0; }
+
+	a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+	a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+	code {
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .84em;
+		background: var(--rule-soft);
+		padding: .1em .34em;
+		border-radius: 2px;
+		word-break: break-word;
+	}
+
+	strong { font-weight: 600; }
+
+	ul { margin: 0 0 1.05rem; padding-left: 1.1rem; }
+	li { margin-bottom: .45rem; }
+
+	/* ---- margin notes ---- */
+
+	.note {
+		grid-column: 2;
+		font-size: .82rem;
+		line-height: 1.5;
+		color: var(--muted);
+		border-left: 2px solid var(--rule);
+		padding-left: .85rem;
+		margin-top: .35rem;
+	}
+
+	.note .lbl {
+		display: block;
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .66rem;
+		letter-spacing: .14em;
+		text-transform: uppercase;
+		color: var(--faint);
+		margin-bottom: .3rem;
+	}
+
+	/* ---- table ---- */
+
+	.scroller { overflow-x: auto; margin: 0 0 1.3rem; }
+
+	table {
+		border-collapse: collapse;
+		width: 100%;
+		min-width: 40rem;
+		font-size: .89rem;
+		background: var(--surface);
+		box-shadow: var(--shadow);
+	}
+
+	th, td {
+		text-align: left;
+		vertical-align: top;
+		padding: .7rem .85rem;
+		border-bottom: 1px solid var(--rule-soft);
+	}
+
+	thead th {
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .68rem;
+		letter-spacing: .13em;
+		text-transform: uppercase;
+		color: var(--faint);
+		font-weight: 400;
+		border-bottom: 1px solid var(--rule);
+	}
+
+	tbody tr:last-child td { border-bottom: none; }
+
+	td.opt { font-weight: 600; white-space: nowrap; }
+	td.src { font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace; font-size: .76rem; color: var(--muted); }
+
+	/* ---- compaction band ---- */
+
+	figure { margin: 1.6rem 0 1.4rem; }
+
+	.band {
+		display: flex;
+		border: 1px solid var(--rule);
+		background: var(--surface);
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .68rem;
+		letter-spacing: .06em;
+		text-transform: uppercase;
+		overflow: hidden;
+	}
+
+	.band > div {
+		padding: .85rem .7rem;
+		text-align: center;
+		color: var(--muted);
+		border-right: 1px solid var(--rule-soft);
+	}
+
+	.band > div:last-child { border-right: none; }
+	.band .gone   { flex: 5; background: var(--rule-soft); }
+	.band .prefix { flex: 1.4; }
+	.band .kept   { flex: 3; color: var(--accent); background: var(--accent-dim); }
+
+	.cutline {
+		display: flex;
+		font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+		font-size: .66rem;
+		letter-spacing: .1em;
+		text-transform: uppercase;
+		color: var(--open);
+		margin-top: .35rem;
+	}
+	.cutline > span:first-child { flex: 6.4; text-align: right; padding-right: .3rem; }
+	.cutline > span:last-child { flex: 3; }
+
+	figcaption { font-size: .82rem; color: var(--muted); margin-top: .8rem; line-height: 1.5; }
+
+	/* ---- quiz ---- */
+
+	.quiz { background: var(--surface); border: 1px solid var(--rule); padding: 1.5rem 1.5rem .6rem; box-shadow: var(--shadow); }
+
+	.q { margin-bottom: 1.7rem; }
+	.q:last-of-type { margin-bottom: 1.1rem; }
+	.q > p { font-weight: 600; margin-bottom: .7rem; }
+
+	.opts { display: flex; flex-direction: column; gap: .4rem; }
+
+	.opts button {
+		font: inherit;
+		font-size: .92rem;
+		text-align: left;
+		background: var(--paper);
+		color: var(--ink);
+		border: 1px solid var(--rule);
+		border-radius: 2px;
+		padding: .55rem .7rem;
+		cursor: pointer;
+		transition: border-color .12s ease, background .12s ease;
+	}
+
+	.opts button:hover:not([disabled]) { border-color: var(--accent); }
+	.opts button[disabled] { cursor: default; }
+	.opts button.right { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+	.opts button.wrong { border-color: var(--open); background: var(--open-dim); color: var(--open); }
+
+	.verdict {
+		font-size: .87rem;
+		color: var(--muted);
+		margin-top: .65rem;
+		min-height: 1.2em;
+		line-height: 1.5;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		* { transition: none !important; }
+	}
+
+	@media (max-width: 62rem) {
+		.sheet { grid-template-columns: minmax(0, 1fr); gap: 0; }
+		.sheet > * { grid-column: 1; }
+		.note { grid-column: 1; margin: 0 0 1.2rem; max-width: 66ch; }
+	}
+
+	@media print {
+		body { background: #fff; color: #000; font-size: 11pt; }
+		.quiz, .note { break-inside: avoid; }
+	}
+</style>
+
+<div class="sheet">
+
+	<header class="masthead">
+		<div class="eyebrow">
+			<span>Lesson 01</span>
+			<span>Ticket 09</span>
+			<span class="chip">Open</span>
+			<span>Blocked by 04, 13</span>
+		</div>
+		<h1>Feeding the Graph Back</h1>
+		<p class="standfirst">
+			Recording every decision the agent makes costs nothing. Putting any of it back into
+			the agent's head is where the whole feature is won or lost.
+		</p>
+	</header>
+
+	<section>
+		<h2><span class="num">The win</span>Capture is free. Consumption is the bill.</h2>
+
+		<p>
+			Everything settled so far in this project has been about writing things down. Ticket
+			03 established that Capture rides on events Pi already emits, and writes one SQLite
+			row per assistant message. No second model runs. No extra tokens are spent. The store
+			just accumulates.
+		</p>
+		<p>
+			Ticket 09 asks the opposite question. Given that store, how does any of it reach the
+			agent again? Every answer costs context, and context is the scarcest thing the agent
+			has. This is also the only place the feature can make the agent measurably worse, by
+			handing it confident reasoning about code that was deleted three months ago.
+		</p>
+		<p>
+			By the end of this page you should be able to name the five decisions ticket 09 has
+			to make, and point at the exact Pi hook each candidate answer would use.
+		</p>
+	</section>
+
+	<aside class="note">
+		<span class="lbl">Vocabulary</span>
+		Capture is the online pass that only witnesses. Assembly is the offline pass that derives
+		judgements. Both are defined in <code>packages/decision-graph/CONTEXT.md</code>, which is
+		binding on every part of this feature.
+	</aside>
+
+	<section>
+		<h2><span class="num">Question 1 of 5</span>What does the agent actually receive?</h2>
+
+		<p>
+			Three shapes are on the table in the ticket: text injected into the system prompt, a
+			tool the agent can call, or a summary produced at compaction time. Reading
+			<code>packages/coding-agent/src/core/extensions/types.ts</code> turns those from
+			abstractions into named hooks with known capabilities.
+		</p>
+
+		<div class="scroller">
+			<table>
+				<thead>
+					<tr>
+						<th>Shape</th>
+						<th>What it would use</th>
+						<th>What it costs</th>
+						<th>Evidence</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td class="opt">Prologue</td>
+						<td>Return a replacement <code>systemPrompt</code>, or a message, from <code>before_agent_start</code>.</td>
+						<td>Paid once per Run, then re-sent on every turn of that Run whether it was needed or not.</td>
+						<td class="src">BeforeAgentStartEventResult, types.ts:1102</td>
+					</tr>
+					<tr>
+						<td class="opt">Per-turn splice</td>
+						<td>Return rewritten <code>messages</code> from the <code>context</code> event.</td>
+						<td>Most surgical and most dangerous. It fires before every provider call and can rewrite history.</td>
+						<td class="src">ContextEventResult, types.ts:1065</td>
+					</tr>
+					<tr>
+						<td class="opt">Queryable tool</td>
+						<td>A <code>query_decisions</code> tool registered by the extension.</td>
+						<td>Nothing until called, minus the tool definition itself. But the agent has to decide to call it, and that costs a round trip.</td>
+						<td class="src">Tool registration, extensions.md</td>
+					</tr>
+					<tr>
+						<td class="opt">Post-compaction</td>
+						<td>Re-inject after <code>session_compact</code> fires.</td>
+						<td>Only paid when the agent has just forgotten something. See question 4.</td>
+						<td class="src">session_compact, extensions.md:388+</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+
+		<p>
+			Worth flagging against ticket 03. That ticket dropped the fork of Pi's core for
+			Capture, but kept a core edit pre-authorized for ticket 09 alone, in case injection
+			needed an interception point the extension surface could not reach. On the evidence
+			above, it does not. Two documented hooks already return mutated context, and a third
+			fires at the compaction boundary. Ticket 09 can probably hand that pre-authorization
+			back unused, which is a real result rather than a formality.
+		</p>
+	</section>
+
+	<aside class="note">
+		<span class="lbl">Cost note</span>
+		The prologue shape looks expensive but is the friendliest to prompt caching, because it
+		sits at a stable position near the front of the context. The per-turn splice is the
+		opposite: rewriting messages mid-history invalidates the cache behind the edit.
+	</aside>
+
+	<section>
+		<h2><span class="num">Question 2 of 5</span>Which slice gets surfaced, and by what rule?</h2>
+
+		<p>
+			The store will be far larger than any context window, so something has to choose. The
+			ticket adds one hard constraint: the rule must be deterministic. No model gets to pick,
+			because a model picking is exactly the second inference pass this whole project
+			refuses to pay for.
+		</p>
+		<p>
+			The candidates named are decisions touching files in this turn, the last N decisions,
+			and decisions on the failing path. All three are cheap to compute. None of them is
+			any good on its own, which is why ticket 09 is blocked by ticket 13.
+		</p>
+		<p>
+			Ticket 13 is the one that works out which decisions still explain the current state of
+			a file, by checking whether a later edit provably overwrote the bytes an earlier one
+			wrote. Its worked example is the whole argument: six months in, <code>a.ts</code>
+			carries 200 decisions, and the rationale from March describes code rewritten in June.
+			Feed all 200 back and the agent gets worse, not better. So ticket 13 supplies the
+			relevance test, and ticket 09 only picks the window over it.
+		</p>
+	</section>
+
+	<section>
+		<h2><span class="num">Question 3 of 5</span>What is the budget, and what gets dropped first?</h2>
+
+		<p>
+			A hard token cap, plus an ordering for what falls off the end when the cap binds. The
+			ticket asks for both and settles neither. The schema from ticket 04 already carries
+			enough columns to sort by: how recent a decision is, whether ticket 13 marked it
+			superseded, and what its WHY Source rung was.
+		</p>
+		<p>
+			That last one matters more than it looks. Ticket 02 established that no provider hands
+			back raw chain of thought, so every Decision records where its rationale came from, on
+			a five rung ladder from a provider summary down to nothing at all. A decision whose
+			only WHY is the assistant's own prose is weaker evidence than one carrying a real
+			reasoning summary, and the store knows which is which. Dropping by rung is available
+			for free.
+		</p>
+	</section>
+
+	<aside class="note">
+		<span class="lbl">Measured, not guessed</span>
+		Ticket 04 sized real records rather than estimating: median 1.8 KB per Decision against
+		289 actual assistant messages. Budget arithmetic here has a real number behind it.
+	</aside>
+
+	<section>
+		<h2><span class="num">Question 4 of 5</span>The interesting one: what about compaction?</h2>
+
+		<p>
+			Compaction is where the agent forgets. When context approaches the window,
+			<code>prepareCompaction</code> picks a cut point in the session, sends everything
+			before it to a model to be summarized, and keeps a recent tail verbatim.
+		</p>
+
+		<figure>
+			<div class="band">
+				<div class="gone">summarized by a model call</div>
+				<div class="prefix">turn prefix</div>
+				<div class="kept">retained tail</div>
+			</div>
+			<div class="cutline"><span>cut point &#9660;</span><span></span></div>
+			<figcaption>
+				What compaction does to a session, per <code>prepareCompaction</code> at
+				<code>packages/coding-agent/src/core/compaction/compaction.ts:710</code>. Everything
+				left of the cut is replaced by prose a model wrote about it. When the cut lands inside
+				a turn, that turn's prefix is summarized separately so the retained suffix still makes
+				sense.
+			</figcaption>
+		</figure>
+
+		<p>
+			Now put the graph next to that picture. The store holds the same history, verbatim,
+			never summarized, plus a record of which parts are still live. So the ticket's sharpest
+			question is whether the graph should be a replacement for what compaction discards,
+			re-injected right after a compaction event, or an independent channel that ignores
+			compaction entirely.
+		</p>
+		<p>
+			There is a clean argument for the replacement reading. Compaction's summary is written
+			by a model, which is inference. The graph's WHY is read from what the model already
+			said, which is testimony, and it arrives stamped with its own provenance. Those are
+			different in kind, and the graph is the one that can prove where its content came from.
+		</p>
+		<p>
+			There is an equally clean argument for the risk. Compaction exists to shrink context.
+			Anything re-injected straight afterwards counts against the window that was just
+			cleared, and Pi re-checks whether to compact on the same token threshold. Get the budget
+			wrong and the graph pushes context back over the line that triggered compaction in the
+			first place. The ticket calls this the most likely place to break something, and that is
+			the mechanism.
+		</p>
+	</section>
+
+	<aside class="note">
+		<span class="lbl">Already paid for</span>
+		Ticket 03 subscribed Capture to <code>session_before_compact</code> and
+		<code>session_compact</code> before anything needed them, so compaction boundaries are
+		already being stamped into the store. Cheap then, unrecoverable later.
+	</aside>
+
+	<aside class="note">
+		<span class="lbl">Correction to the ticket</span>
+		Ticket 09 points at <code>packages/agent/src/harness/compaction/</code>. That copy is only
+		re-exported from the agent package's public index and exercised by its own tests. The
+		coding agent runs a second, near-identical copy at
+		<code>packages/coding-agent/src/core/compaction/</code>, which is what
+		<code>agent-session.ts:66</code> imports. Read that one.
+	</aside>
+
+	<section>
+		<h2><span class="num">Question 5 of 5</span>Should consumption default to off?</h2>
+
+		<p>
+			The ticket makes the case in a single parenthesis, and it holds up. A build that only
+			captures is still worth shipping: its overhead can be measured, and a human can read
+			the graph through the viewer without the agent's context ever being touched.
+		</p>
+		<p>
+			Defaulting off also protects the experiment. Ticket 11 has to compare a graph-off arm
+			against a graph-on arm, and it names the confound directly: injecting anything at all
+			changes behaviour, regardless of whether the content was useful. If consumption is a
+			flag rather than a default, the control arm is the ordinary product rather than a
+			special build made for the benchmark.
+		</p>
+	</section>
+
+	<section>
+		<h2><span class="num">Check yourself</span>Three questions, immediate feedback</h2>
+
+		<div class="quiz" id="quiz">
+			<div class="q" data-answer="1">
+				<p>Where does the token cost of the decision graph actually land?</p>
+				<div class="opts">
+					<button type="button">Capture writes each finished turn into the store</button>
+					<button type="button">Consumption feeds stored records back into context</button>
+					<button type="button">Assembly derives file identity and supersession afterwards</button>
+				</div>
+				<div class="verdict" role="status"></div>
+			</div>
+
+			<div class="q" data-answer="0">
+				<p>Why can ticket 09 not be settled before ticket 13?</p>
+				<div class="opts">
+					<button type="button">Because selection needs to know which rationale still holds</button>
+					<button type="button">Because capture needs to know which events to watch</button>
+					<button type="button">Because storage needs to know how large rows grow</button>
+				</div>
+				<div class="verdict" role="status"></div>
+			</div>
+
+			<div class="q" data-answer="0">
+				<p>Which existing Pi event can rewrite messages before a provider call?</p>
+				<div class="opts">
+					<button type="button">The context event, which fires before each provider call</button>
+					<button type="button">The turn_end event, which fires once the tools return</button>
+					<button type="button">The session_start event, which fires when a session opens</button>
+				</div>
+				<div class="verdict" role="status"></div>
+			</div>
+		</div>
+	</section>
+
+	<section>
+		<h2><span class="num">Next</span>Read the primary source</h2>
+
+		<p>
+			The highest-trust source for question 1 is
+			<code>packages/coding-agent/docs/extensions.md</code>. Read the lifecycle diagram
+			around line 275 and follow each event through to its type in
+			<code>packages/coding-agent/src/core/extensions/types.ts</code>. The diagram tells you
+			when a hook fires; only the type tells you whether it can change anything. That gap is
+			where most of ticket 09's option space lives.
+		</p>
+		<p>
+			After that, <code>packages/coding-agent/src/core/compaction/compaction.ts</code> from
+			<code>prepareCompaction</code> at line 710, and the threshold check at
+			<code>agent-session.ts:2049</code>. Those two settle question 4 between them.
+		</p>
+		<p>
+			Anything above that is unclear, or that you want pushed harder, ask. I am your teacher
+			here, and a follow up question is cheaper than a wrong design decision.
+		</p>
+	</section>
+</div>
+
+<script>
+	for (const q of document.querySelectorAll("#quiz .q")) {
+		const answer = Number(q.dataset.answer);
+		const buttons = [...q.querySelectorAll("button")];
+		const verdict = q.querySelector(".verdict");
+
+		buttons.forEach((button, index) => {
+			button.addEventListener("click", () => {
+				for (const b of buttons) b.disabled = true;
+				buttons[answer].classList.add("right");
+				if (index === answer) {
+					verdict.textContent = "Correct.";
+				} else {
+					button.classList.add("wrong");
+					verdict.textContent = "Not that one. The marked answer is the right one.";
+				}
+			});
+		});
+	}
+</script>

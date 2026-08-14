@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decision Graph Viewer — PROTOTYPE</title>
+<style>
+:root {
+    --bg: #fbfbf9;
+    --panel: #ffffff;
+    --ink: #1b1b1a;
+    --ink-dim: #6b6b66;
+    --ink-faint: #a5a5a0;
+    --rule: #e3e3de;
+    --accent: #2f5d8a;
+    --unowned-bg: #f2f2ef;
+    --sat: 72%;
+    --lum: 88%;
+    --swatch-lum: 62%;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #131315;
+        --panel: #1b1b1e;
+        --ink: #e8e8e4;
+        --ink-dim: #9a9a94;
+        --ink-faint: #61615d;
+        --rule: #2e2e32;
+        --accent: #7db0e0;
+        --unowned-bg: #232327;
+        --sat: 42%;
+        --lum: 27%;
+        --swatch-lum: 55%;
+    }
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 var(--sans);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── banner ─────────────────────────────────────────────────────────── */
+.banner {
+    background: #8a5a00;
+    color: #fff;
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    flex: 0 0 auto;
+}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+header {
+    flex: 0 0 auto;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel);
+}
+.path { font-family: var(--mono); font-size: 15px; }
+.counts { color: var(--ink-dim); font-size: 12.5px; margin-top: 3px; }
+.counts b { color: var(--ink); font-weight: 600; }
+.break-note {
+    margin-top: 7px;
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    border-left: 3px solid var(--ink-faint);
+    padding-left: 8px;
+}
+
+/* ── density strip ──────────────────────────────────────────────────── */
+.density { display: flex; gap: 1px; height: 22px; margin-top: 10px; }
+.density .tick { flex: 1 1 0; border-radius: 1px; cursor: pointer; position: relative; }
+.density .tick.past { opacity: .22; }
+.density .tick.nostanding { background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.22) 0 2px, transparent 2px 4px); }
+
+/* ── scrubber ───────────────────────────────────────────────────────── */
+.scrub { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.scrub input[type=range] { flex: 1 1 auto; accent-color: var(--accent); }
+.scrub .asof { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); white-space: nowrap; }
+
+/* ── panes ──────────────────────────────────────────────────────────── */
+main { flex: 1 1 auto; display: flex; min-height: 0; }
+.pane { overflow: auto; min-width: 0; }
+.timeline { flex: 0 0 42%; border-right: 1px solid var(--rule); padding: 8px 0 40px; }
+.source { flex: 1 1 auto; padding: 8px 0 40px; background: var(--panel); }
+
+/* ── timeline ───────────────────────────────────────────────────────── */
+.dec {
+    display: grid;
+    grid-template-columns: 4px 66px 1fr;
+    gap: 8px;
+    padding: 7px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--rule);
+    align-items: start;
+}
+.dec:hover { background: var(--unowned-bg); }
+.dec.sel { background: var(--unowned-bg); box-shadow: inset 2px 0 0 var(--accent); }
+.dec.future { opacity: .3; }
+.dec .swatch { width: 4px; align-self: stretch; border-radius: 2px; min-height: 30px; }
+.dec .when { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); padding-top: 2px; }
+.dec .body { min-width: 0; }
+.dec .why { font-size: 12.5px; }
+.dec .why.nowhy { color: var(--ink-faint); font-style: italic; }
+.dec .meta { font-size: 11px; color: var(--ink-dim); margin-top: 4px; display: flex; align-items: center; gap: 7px; }
+.bar { width: 62px; height: 5px; background: var(--unowned-bg); border-radius: 3px; overflow: hidden; flex: 0 0 auto; }
+.bar i { display: block; height: 100%; }
+.tag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+    border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; color: var(--ink-dim);
+}
+.dec .full { display: none; }
+.dec.sel .full { display: block; margin-top: 7px; font-size: 12.5px; }
+.dec.sel .why.clamp { display: none; }
+.dec .ranges { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); margin-top: 6px; }
+.break-row {
+    padding: 8px 12px 8px 24px;
+    font-size: 11.5px;
+    color: var(--ink-dim);
+    border-bottom: 1px solid var(--rule);
+    background: repeating-linear-gradient(45deg, transparent 0 6px, var(--unowned-bg) 6px 12px);
+}
+.clamp { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+
+/* ── source ─────────────────────────────────────────────────────────── */
+table.src { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12px; }
+table.src td { padding: 0 6px; white-space: pre; vertical-align: top; }
+td.ln {
+    width: 1%; text-align: right; color: var(--ink-faint); user-select: none;
+    border-right: 1px solid var(--rule); font-size: 11px;
+}
+tr.line { cursor: default; }
+tr.line.unowned td.code { background: var(--unowned-bg); box-shadow: inset 2px 0 0 var(--ink-faint); }
+tr.line.notyet td.code { color: transparent; background: transparent; }
+tr.line.notyet td.code::before { content: "·"; color: var(--ink-faint); }
+tr.line.dim td.code { opacity: .3; }
+tr.line.hit td.code { outline: 1px solid var(--accent); outline-offset: -1px; }
+tr.line:hover td.code { filter: brightness(.94); }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) tr.line:hover td.code { filter: brightness(1.35); }
+}
+
+/* ── status ─────────────────────────────────────────────────────────── */
+.status {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--rule);
+    background: var(--panel);
+    padding: 7px 16px;
+    font-size: 12px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-height: 34px;
+}
+.status .sw { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; }
+.status .q { color: var(--ink-faint); }
+.status .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="banner">Prototype — fabricated data, not wired to SQLite. Ticket 10.</div>
+
+<header>
+    <div class="path" id="path"></div>
+    <div class="counts" id="counts"></div>
+    <div class="break-note" id="breakNote"></div>
+    <div class="density" id="density" title="every Decision on this file, oldest left"></div>
+    <div class="scrub">
+        <input type="range" id="scrub" min="1" value="1">
+        <span class="asof" id="asof"></span>
+    </div>
+</header>
+
+<main>
+    <div class="pane timeline" id="timeline"></div>
+    <div class="pane source" id="source"></div>
+</main>
+
+<div class="status" id="status">
+    <span class="q">Hover a line to see which Decision wrote it, and why.</span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// FABRICATED DATA. One File, fourteen Decisions, one Break, one fully
+// superseded Decision, two Decisions with no recorded rationale, and a
+// handful of lines no Decision is known to have written.
+// ═══════════════════════════════════════════════════════════════════════
+
+const FILE_PATH = "packages/agent/src/agent-loop.ts";
+
+const SRC = `import { AgentEventSink } from "./events.ts";
+import { convertToLlm } from "./harness/messages.ts";
+import type { AgentLoopConfig, AgentMessage, ToolResultMessage } from "./types.ts";
+
+const MAX_TURNS = 512;
+
+export async function runAgentLoop(config: AgentLoopConfig): Promise<void> {
+    const sink = config.sink;
+    let turnIndex = 0;
+
+    sink.emit({ type: "agent_start" });
+
+    while (turnIndex < MAX_TURNS) {
+        sink.emit({ type: "turn_start", turnIndex, timestamp: Date.now() });
+
+        const transformed = config.transformContext
+            ? await config.transformContext(config.state.messages, config.signal)
+            : config.state.messages;
+
+        const llmMessages = await config.convertToLlm(transformed);
+
+        const assistant = await streamAssistant({
+            model: config.model,
+            messages: llmMessages,
+            systemPrompt: config.state.systemPrompt,
+            tools: config.state.tools,
+            signal: config.signal,
+        });
+
+        sink.emit({ type: "message_end", message: assistant });
+
+        if (assistant.stopReason === "error") {
+            sink.emit({ type: "agent_end", messages: config.state.messages });
+            return;
+        }
+
+        const toolCalls = assistant.content.filter((c) => c.type === "toolCall");
+        if (toolCalls.length === 0) {
+            sink.emit({ type: "turn_end", turnIndex, message: assistant, toolResults: [] });
+            break;
+        }
+
+        const toolResults = await executeToolCalls(toolCalls, config);
+
+        // turn_end must carry the model's own toolCalls array, not toolResults:
+        // an abort mid-batch drops trailing results but never drops the calls.
+        sink.emit({ type: "turn_end", turnIndex, message: assistant, toolResults });
+
+        config.state.messages.push(assistant, ...toolResults);
+        turnIndex += 1;
+
+        if (await config.shouldStopAfterTurn?.({ turnIndex })) {
+            break;
+        }
+    }
+
+    sink.emit({ type: "agent_end", messages: config.state.messages });
+}
+
+async function executeToolCalls(
+    calls: ToolCall[],
+    config: AgentLoopConfig,
+): Promise<ToolResultMessage[]> {
+    const settled = await Promise.all(
+        calls.map(async (call) => {
+            await config.sink.emit({
+                type: "tool_execution_start",
+                toolCallId: call.id,
+                toolName: call.name,
+                args: call.arguments,
+            });
+
+            const finalized = await prepareToolCall(call, config);
+            const result = await finalized.run(config.signal);
+
+            await config.sink.emit({
+                type: "tool_execution_end",
+                toolCallId: call.id,
+                toolName: call.name,
+                result,
+                isError: result.isError ?? false,
+            });
+
+            return toResultMessage(call, result, finalized.details);
+        }),
+    );
+    return settled;
+}`.split("\n");
+
+// `writes` are CURRENT-file line numbers, oldest Decision first.
+// A line's owner is the LAST Decision that wrote it — ticket 13's claim-once rule.
+const DECISIONS = [
+    { id: "0194c1a0-1", date: "2026-01-05", whySource: "summary", attributable: false,
+      writes: r(1,14).concat([19,20,21,30,31], r(37,41), [49,50,51], r(55,58)),
+      why: "Starting with the smallest loop that can drive a tool-using model: emit agent_start, stream one assistant message, run whatever tool calls it asks for, append the results, repeat. MAX_TURNS is a guard against a model that never stops calling tools, not a real limit." },
+
+    { id: "0194c2b1-2", date: "2026-01-06", whySource: "none", attributable: false,
+      writes: [5], why: null },
+
+    { id: "0194c4c2-3", date: "2026-01-09", whySource: "text_only", attributable: false,
+      writes: r(60,63).concat(r(86,88)),
+      why: "Pulling tool execution into its own function. Inlining it made the main loop hard to read, and I want the Promise.all in one place so the ordering guarantee is obvious to anyone reading it." },
+
+    { id: "0194c8d3-4", date: "2026-01-14", whySource: "summary", attributable: true,
+      writes: [64,65,84,85],
+      why: "Promise.all preserves the order of its input array regardless of completion order, so results line up with calls without any sorting. Using it deliberately for that property, not for the concurrency." },
+
+    { id: "0194ccf4-5", date: "2026-01-22", whySource: "summary", attributable: true,
+      writes: r(66,72),
+      why: "Emitting tool_execution_start before prepareToolCall, so a subscriber sees the arguments before the tool touches anything. Awaiting the emit is the whole point: a handler that reads the target file has to finish before the write does." },
+
+    { id: "0194d105-6", date: "2026-02-02", whySource: "summary", attributable: true,
+      writes: [73,74],
+      why: "Splitting prepareToolCall out of the run, so a validation failure surfaces before we claim the file mutation queue and have to release it." },
+
+    { id: "0194d216-7", date: "2026-02-05", whySource: "summary", attributable: true,
+      writes: r(76,83),
+      why: "tool_execution_end carries isError separately, because a tool can return a result object that is itself an error without ever throwing, and subscribers were guessing from the shape of result." },
+
+    { id: "0194d527-8", date: "2026-02-11", whySource: "text_only", attributable: true,
+      writes: [16,17,18],
+      why: "transformContext runs before convertToLlm so extensions work at the AgentMessage level and never have to know the provider's message shape." },
+
+    { id: "0194d638-9", date: "2026-02-14", whySource: "summary", attributable: true,
+      writes: r(22,28),
+      why: "Passing systemPrompt and tools from state rather than from config, so a mid-session change to either takes effect on the next turn without rebuilding the loop." },
+
+    { id: "0194d849-a", date: "2026-02-20", whySource: "summary", attributable: true,
+      writes: [32,33,34,35],
+      why: "An error stop reason has to exit before the tool-call branch. Falling through meant a failed stream with no content was treated as a turn with zero tool calls, which looked exactly like a clean finish." },
+
+    { id: "0194da5a-b", date: "2026-02-28", whySource: "none", attributable: true,
+      writes: [43,73,74], why: null },
+
+    { id: "0194dc6b-c", date: "2026-03-03", whySource: "summary", attributable: true,
+      writes: [52,53,54],
+      why: "shouldStopAfterTurn is checked after the results are appended, so a graceful stop still leaves a complete turn in the history rather than a half of one." },
+
+    { id: "0194de7c-d", date: "2026-03-09", whySource: "summary", attributable: true,
+      writes: [20].concat(r(37,41)),
+      why: "Filtering content for toolCall rather than reading a separate field, because the provider adapters do not agree on where tool calls land and content is the one thing all of them populate." },
+
+    { id: "0194e08d-e", date: "2026-03-14", whySource: "summary", attributable: true,
+      writes: [45,46,47],
+      why: "turn_end must carry the model's own toolCalls array rather than toolResults. An abort mid-batch drops the trailing results, but those calls were still issued, and sourcing from toolResults made them vanish from the record entirely." },
+];
+
+function r(a, b) { const o = []; for (let i = a; i <= b; i++) o.push(i); return o; }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Derived: writer history per line, then owner as of any scrub position.
+// ═══════════════════════════════════════════════════════════════════════
+
+const N = SRC.length;
+const writers = Array.from({ length: N + 1 }, () => []);
+DECISIONS.forEach((d, i) => { for (const ln of d.writes) writers[ln].push(i); });
+
+const BREAK_AFTER = DECISIONS.findIndex((d) => d.attributable); // oldest attributable
+const hue = (i) => (i * 47 + 18) % 360;
+const bgOf = (i) => `hsl(${hue(i)} var(--sat) var(--lum))`;
+const swOf = (i) => `hsl(${hue(i)} 60% var(--swatch-lum))`;
+
+// owner of a line as of Decision index k (inclusive), or -1 if not yet written
+function ownerAsOf(ln, k) {
+    const w = writers[ln];
+    for (let j = w.length - 1; j >= 0; j--) if (w[j] <= k) return w[j];
+    return -1;
+}
+function rangesFor(di, k) {
+    const out = [];
+    for (let ln = 1; ln <= N; ln++) {
+        if (ownerAsOf(ln, k) !== di) continue;
+        if (out.length && out[out.length - 1][1] === ln - 1) out[out.length - 1][1] = ln;
+        else out.push([ln, ln]);
+    }
+    return out;
+}
+function survivingAsOf(di, k) {
+    let n = 0;
+    for (let ln = 1; ln <= N; ln++) if (ownerAsOf(ln, k) === di) n++;
+    return n;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Render
+// ═══════════════════════════════════════════════════════════════════════
+
+let scrubK = DECISIONS.length - 1;
+let selected = null;
+
+const el = (id) => document.getElementById(id);
+const scrubEl = el("scrub");
+scrubEl.max = String(DECISIONS.length);
+scrubEl.value = String(DECISIONS.length);
+
+function renderHeader() {
+    el("path").textContent = FILE_PATH;
+    const visible = DECISIONS.slice(0, scrubK + 1);
+    const standing = visible.filter((_, i) => survivingAsOf(i, scrubK) > 0).length;
+    const noWhy = visible.filter((d) => !d.why).length;
+    el("counts").innerHTML =
+        `<b>${visible.length}</b> Decisions touched this file. ` +
+        `<b>${standing}</b> still own lines in it. ` +
+        `${noWhy} have no recorded rationale.`;
+
+    const oldestAttributable = DECISIONS[BREAK_AFTER];
+    const lost = BREAK_AFTER;
+    el("breakNote").textContent =
+        `The record cannot account for this file before ${oldestAttributable.date}. ` +
+        `${lost} earlier Decisions exist and cannot be attributed.`;
+
+    el("asof").textContent = `as of ${DECISIONS[scrubK].date}`;
+}
+
+function renderDensity() {
+    const d = el("density");
+    d.innerHTML = "";
+    DECISIONS.forEach((dec, i) => {
+        const t = document.createElement("div");
+        t.className = "tick" + (i > scrubK ? " past" : "") +
+            (i <= scrubK && survivingAsOf(i, scrubK) === 0 ? " nostanding" : "");
+        t.style.background = swOf(i);
+        t.title = `${dec.date} — ${survivingAsOf(i, scrubK)} of ${dec.writes.length} lines standing`;
+        t.onclick = () => { selected = selected === i ? null : i; render(); };
+        d.appendChild(t);
+    });
+}
+
+function renderTimeline() {
+    const t = el("timeline");
+    t.innerHTML = "";
+    for (let i = DECISIONS.length - 1; i >= 0; i--) {
+        const dec = DECISIONS[i];
+        const surv = survivingAsOf(i, scrubK);
+        const written = dec.writes.length;
+        const future = i > scrubK;
+
+        const row = document.createElement("div");
+        row.className = "dec" + (selected === i ? " sel" : "") + (future ? " future" : "");
+        row.onclick = () => { selected = selected === i ? null : i; render(); };
+
+        const pct = written ? Math.round((surv / written) * 100) : 0;
+        const rs = rangesFor(i, scrubK).map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(", ");
+
+        row.innerHTML =
+            `<div class="swatch" style="background:${swOf(i)}"></div>` +
+            `<div class="when">${dec.date}</div>` +
+            `<div class="body">` +
+                (dec.why
+                    ? `<div class="why clamp">${esc(dec.why)}</div><div class="full">${esc(dec.why)}</div>`
+                    : `<div class="why nowhy">no recorded rationale</div>`) +
+                `<div class="meta">` +
+                    `<span class="bar"><i style="width:${pct}%;background:${swOf(i)}"></i></span>` +
+                    `<span>${surv} of ${written} standing</span>` +
+                    (dec.attributable ? "" : `<span class="tag">unattributable</span>`) +
+                    (dec.whySource === "text_only" ? `<span class="tag">text only</span>` : "") +
+                `</div>` +
+                (rs ? `<div class="ranges">lines ${rs}</div>` : `<div class="ranges">owns no current line</div>`) +
+            `</div>`;
+        t.appendChild(row);
+
+        if (i === BREAK_AFTER) {
+            const br = document.createElement("div");
+            br.className = "break-row";
+            br.textContent = `Break — everything below is unattributable. ` +
+                `Something changed this file that was never witnessed.`;
+            t.appendChild(br);
+        }
+    }
+}
+
+function renderSource() {
+    const s = el("source");
+    const rows = [];
+    for (let ln = 1; ln <= N; ln++) {
+        const own = ownerAsOf(ln, scrubK);
+        let cls = "line";
+        let bg = "";
+        if (own === -1) {
+            cls += writers[ln].length ? " notyet" : " unowned";
+        } else {
+            bg = `background:${bgOf(own)}`;
+            if (selected !== null && own !== selected) cls += " dim";
+            if (selected !== null && own === selected) cls += " hit";
+        }
+        rows.push(
+            `<tr class="${cls}" data-ln="${ln}">` +
+            `<td class="ln">${ln}</td>` +
+            `<td class="code" style="${bg}">${esc(SRC[ln - 1]) || " "}</td></tr>`
+        );
+    }
+    s.innerHTML = `<table class="src"><tbody>${rows.join("")}</tbody></table>`;
+    s.querySelectorAll("tr.line").forEach((tr) => {
+        tr.onmouseenter = () => status(Number(tr.dataset.ln));
+    });
+}
+
+function status(ln) {
+    const own = ownerAsOf(ln, scrubK);
+    const box = el("status");
+    if (own === -1) {
+        box.innerHTML = writers[ln].length
+            ? `<span class="q">line ${ln} — not written yet as of ${DECISIONS[scrubK].date}</span>`
+            : `<span class="q">line ${ln} — no Decision is known to have written this. ` +
+              `Something changed it that was never witnessed.</span>`;
+        return;
+    }
+    const d = DECISIONS[own];
+    box.innerHTML =
+        `<span class="sw" style="background:${swOf(own)}"></span>` +
+        `<span class="q">line ${ln} &middot; ${d.date}</span>` +
+        `<span class="txt">${d.why ? esc(d.why) : "no recorded rationale"}</span>`;
+}
+
+function esc(s) {
+    return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function render() { renderHeader(); renderDensity(); renderTimeline(); renderSource(); }
+
+scrubEl.oninput = () => { scrubK = Number(scrubEl.value) - 1; selected = null; render(); };
+render();
+</script>
+</body>
+</html>

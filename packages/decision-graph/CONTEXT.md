@@ -26,8 +26,15 @@ _Avoid_: using "turn" as a synonym for Decision
 
 **Session**:
 One Pi session, identified by the session id in its session file. Contains one or more
-Runs. Forks and resumes create new Sessions with a recorded parent.
+Runs, and may span months. Forking a Session creates a new one with a recorded parent;
+resuming does not — it reopens the same Session.
 _Avoid_: chat, thread, transcript
+
+**Sitting**:
+One continuous period of work on a Session, from the moment Pi starts or reloads it until
+that process lets it go. A Session has many Sittings; the gap between two of them is the
+strongest free hint that intent changed.
+_Avoid_: session start, run, visit
 
 ### Rationale
 
@@ -51,8 +58,9 @@ _Avoid_: empty decision, incomplete record
 ### Change
 
 **File**:
-A repo-relative path. Its identity is the path string itself, exactly as the tool
-received it.
+A repo-relative path, in the form the harness itself resolved it to, not the form the
+model typed. Its identity is that canonical string. The model's own wording is kept
+verbatim elsewhere, as part of the Requested Change.
 _Avoid_: document, artifact, source file
 
 **Touch**:
@@ -70,14 +78,37 @@ What the model asked to happen, as it appears in the tool arguments. May differ 
 Applied Change, and is never substituted for it.
 _Avoid_: intent, proposed edit
 
+**Attribution**:
+The relation between a line of a File as it stands now and the Decision that last wrote it.
+Every line has at most one; a line no Decision is known to have written has none. Derived
+from the record and the File itself, never observed.
+_Avoid_: blame, ownership, authorship
+
+**Standing**:
+How much of what a Decision wrote to a File still survives in it, counted in the lines the
+Decision is still Attributed. A matter of degree, not a flag. A Decision with no Standing is
+still part of how the File came to be: it is history, not an error.
+_Avoid_: live, active, stale, relevant
+
 **Supersession**:
-The relation holding when a later Decision destroyed the work of an earlier one, proven
-by their Applied Changes overlapping in the same File. Derived, never observed.
+The condition of a Decision whose written lines have been taken over by later Decisions. It
+is the absence of Standing, so it is partial in the ordinary case and total only at the
+limit. Derived, never observed, and never a change to the superseded Decision.
 _Avoid_: overwrite, conflict, invalidation
 
+**Break**:
+The point in a File's history past which the record can no longer account for its contents,
+because something changed the File that was never witnessed. Everything older than a Break
+is unattributable: neither surviving nor superseded, simply unknown. A Break is always
+reported when the history it interrupts is handed to anyone, since a history that hides
+where it stops reads as a complete one.
+_Avoid_: gap, corruption, missing history
+
 **Symbol Label**:
-An optional note of which declaration a Touch fell inside, attached to the Touch. It is a
-label with no identity, so a later rename cannot corrupt it and it can never be a node.
+An optional note of which declaration a Touch fell inside, as the File stood when the Touch
+happened. It has no identity, so a later rename cannot corrupt it, it can never be a node,
+and it is not stored — it is read off the reconstructed File at the moment Attribution passes
+that Touch. Absent is an ordinary answer, not a gap.
 _Avoid_: symbol node, code entity, declaration node
 
 **Rename Evidence**:
@@ -88,8 +119,9 @@ _Avoid_: rename, move (as a recorded fact)
 ### Relations between Decisions
 
 **Follows**:
-The relation between a Decision and the one immediately before it in the same Session,
-by generation order. Read from `decision.id`'s own ordering; never a stored row.
+The relation between a Decision and the one it actually continues from — its nearest
+ancestor in the Session's own entry tree. Read from that tree when the Session file is
+readable, and from `decision.id`'s ordering when it is not. Never a stored row.
 _Avoid_: next, previous, precedes
 
 **Steer**:
@@ -114,10 +146,11 @@ Caused-by-error, narrowed to a predecessor and successor that named the same too
 the same File, when the tool is anchored to one).
 _Avoid_: repeats, retries (as a noun on the earlier Decision)
 
-**Resumed-from**:
-The relation holding across a Session boundary, from a resumed Session's first Decision
-back to its parent Session's last. Backed by `session.parent_session_id`; not a new fact.
-_Avoid_: continues, forked-from
+**Forked-from**:
+The relation holding across a Session boundary, from a forked Session's first Decision
+back to its parent Session's last. Backed by `session.parent_session_file`; not a new
+fact. Resuming a Session creates no boundary and therefore no such relation.
+_Avoid_: resumed-from, continues, branched-from
 
 ### The two passes
 
@@ -127,9 +160,11 @@ never resolves identity, never infers a relation, and never rewrites a record.
 _Avoid_: logging, tracing, instrumentation, hooking
 
 **Assembly**:
-The offline pass. Reads what Capture wrote and derives everything that required a
-judgement — File identity across renames, Supersession, Symbol Labels. Deterministic and
-re-runnable, so a better Assembly retroactively improves the whole history.
+The offline pass. Reads what Capture wrote, and the working tree itself, and derives
+everything that required a judgement — File identity across renames, Attribution,
+Supersession, Symbol Labels. Deterministic given both of those inputs, and re-runnable, so a
+better Assembly retroactively improves the whole history. Its output is a cache: it may be
+discarded and recomputed, which is why overwriting it is not a change to the record.
 _Avoid_: processing, enrichment, indexing, post-processing
 
 **Store**:
@@ -139,5 +174,22 @@ _Avoid_: log, database, cache, index
 
 **Compaction Boundary**:
 A marker of where Pi discarded context mid-Session. It never affects what was Captured;
-it constrains what may be fed back to the agent later.
+it constrains what may be fed back to the agent later, and it is the one moment that
+warrants a Nudge, because it is the one moment the agent cannot tell it has forgotten
+something.
 _Avoid_: truncation, summarization point
+
+### Reaching the agent
+
+**Consultation**:
+The agent asking what the record says about a region of a File, and the answer it gets
+back. Always asked for, never volunteered, and always an answer about the File as it
+stands now.
+_Avoid_: injection, retrieval, context feed, query (as the name of the act)
+
+**Nudge**:
+The one thing the record says to the agent unbidden: after a Compaction Boundary, which
+Files the discarded span had Decisions about. It carries names and no rationale, because
+its purpose is to restore the agent's awareness that a Consultation is available, not to
+answer a question nobody asked.
+_Avoid_: reminder, prompt, hint, re-injection
